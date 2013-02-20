@@ -10,7 +10,7 @@ that assignment handy would've been quite useful.
 
 Descriptions
 ------------
-  - *10-605*: This is a collection of homework assignments from Carnegie Mellon's
+  - **10-605**: This is a collection of homework assignments from Carnegie Mellon's
   Big Data course, Spring 2013. They're all in Java and involve various iterations
   towards implementing machine learning algorithms in the Hadoop framework.
   

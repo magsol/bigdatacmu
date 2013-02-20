@@ -7,9 +7,11 @@ tasks: two for training, one for joining the trained model to the test data,
 and one for classification.
 
 To create the .jar archive:
+
     javac *.java
     jar cf NBTask.jar *.class
 
 To run the job:
+
     hadoop jar NBTask.jar NBController /path/to/training/data /path/to/test/data /output/dir
     
