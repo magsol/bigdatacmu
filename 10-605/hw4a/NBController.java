@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.util.Vector;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -20,13 +21,15 @@ import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
 
 /**
  * @author Shannon Quinn
  *
  * Sets up the training and testing jobs for Naive Bayes.
  */
-public class NBController {
+public class NBController extends Configured implements Tool {
     
     public static final double ALPHA = 1.0;
     
@@ -82,25 +85,25 @@ public class NBController {
             fs.delete(path, true);
         }
     }
-
-    /**
-     * @param args
-     */
-    public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException {
+    
+    @Override
+    public int run(String [] args) throws Exception {
+        Configuration conf = getConf();
         Configuration classifyConf = new Configuration();
         
-        Path traindata = new Path(args[0]);
-        Path testdata = new Path(args[1]);
-        Path output = new Path(args[2]);
+        Path traindata = new Path(conf.get("train"));
+        Path testdata = new Path(conf.get("test"));
+        Path output = new Path(conf.get("output"));
+        int numReducers = conf.getInt("reducers", 10);
         Path distCache = new Path(output.getParent(), "cache");
         Path model = new Path(output.getParent(), "model");
         Path joined = new Path(output.getParent(), "joined");
         
-        Configuration conf = new Configuration();
-        
         // Job 1a: Extract information on each word.
         NBController.delete(conf, model);
         Job trainWordJob = new Job(conf, "shannon-nb-wordtrain");
+        trainWordJob.setJarByClass(NBController.class);
+        trainWordJob.setNumReduceTasks(numReducers);
         trainWordJob.setMapperClass(NBTrainWordMapper.class);
         trainWordJob.setReducerClass(NBTrainWordReducer.class);
         
@@ -115,7 +118,10 @@ public class NBController {
         FileInputFormat.addInputPath(trainWordJob, traindata);
         FileOutputFormat.setOutputPath(trainWordJob, model);
         
-        trainWordJob.waitForCompletion(true);
+        if (!trainWordJob.waitForCompletion(true)) {
+            System.err.println("ERROR: Word training failed!");
+            return 1;
+        }
         
         classifyConf.setLong(NBController.VOCABULARY_SIZE,
                 trainWordJob.getCounters().findCounter(NBController.NB_COUNTERS.VOCABULARY_SIZE).getValue());
@@ -123,6 +129,8 @@ public class NBController {
         // Job 1b: Tabulate label-based statistics.
         NBController.delete(conf, distCache);
         Job trainLabelJob = new Job(conf, "shannon-nb-labeltrain");
+        trainLabelJob.setJarByClass(NBController.class);
+        trainLabelJob.setNumReduceTasks(numReducers);
         trainLabelJob.setMapperClass(NBTrainLabelMapper.class);
         trainLabelJob.setReducerClass(NBTrainLabelReducer.class);
         
@@ -137,7 +145,10 @@ public class NBController {
         FileInputFormat.addInputPath(trainLabelJob, traindata);
         FileOutputFormat.setOutputPath(trainLabelJob, distCache);
         
-        trainLabelJob.waitForCompletion(true);
+        if (!trainLabelJob.waitForCompletion(true)) {
+            System.err.println("ERROR: Label training failed!");
+            return 1;
+        }
         
         classifyConf.setLong(NBController.UNIQUE_LABELS,
                 trainLabelJob.getCounters().findCounter(NBController.NB_COUNTERS.UNIQUE_LABELS).getValue());
@@ -147,6 +158,8 @@ public class NBController {
         // Job 2: Reduce-side join the test dataset with the model.
         NBController.delete(conf, joined);
         Job joinJob = new Job(conf, "shannon-nb-testprep");
+        joinJob.setJarByClass(NBController.class);
+        joinJob.setNumReduceTasks(numReducers);
         MultipleInputs.addInputPath(joinJob, model, KeyValueTextInputFormat.class,
                 NBJoinModelMapper.class);
         MultipleInputs.addInputPath(joinJob, testdata, TextInputFormat.class,
@@ -162,12 +175,17 @@ public class NBController {
         
         FileOutputFormat.setOutputPath(joinJob, joined);
         
-        joinJob.waitForCompletion(true);
+        if (!joinJob.waitForCompletion(true)) {
+            System.err.println("ERROR: Joining failed!");
+            return 1;
+        }
         
         // Job 3: Classification!
         NBController.delete(classifyConf, output);
         DistributedCache.addCacheFile(new Path(distCache, "part-r-00000").toUri(), classifyConf);
         Job classify = new Job(classifyConf, "shannon-nb-classify");
+        classify.setJarByClass(NBController.class);
+        classify.setNumReduceTasks(numReducers);
         
         classify.setMapperClass(NBClassifyMapper.class);
         classify.setReducerClass(NBClassifyReducer.class);
@@ -183,7 +201,10 @@ public class NBController {
         FileInputFormat.addInputPath(classify, joined);
         FileOutputFormat.setOutputPath(classify, output);
         
-        classify.waitForCompletion(true);
+        if (!classify.waitForCompletion(true)) {
+            System.err.println("ERROR: Classification failed!");
+            return 1;
+        }
         
         // Last job: manually read through the output file and 
         // sort the list of classification probabilities.
@@ -201,6 +222,14 @@ public class NBController {
         IOUtils.closeStream(in);
         
         System.out.println(String.format("%s/%s, accuracy %.2f", correct, total, ((double)correct / (double)total) * 100.0));
+        return 0;
     }
 
+    /**
+     * @param args
+     */
+    public static void main(String[] args) throws Exception {
+        int exitCode = ToolRunner.run(new NBController(), args);
+        System.exit(exitCode);
+    }
 }
