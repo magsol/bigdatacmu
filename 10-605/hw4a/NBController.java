@@ -1,6 +1,4 @@
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Vector;
@@ -8,6 +6,8 @@ import java.util.Vector;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.filecache.DistributedCache;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IOUtils;
@@ -182,7 +182,14 @@ public class NBController extends Configured implements Tool {
         
         // Job 3: Classification!
         NBController.delete(classifyConf, output);
-        DistributedCache.addCacheFile(new Path(distCache, "part-r-00000").toUri(), classifyConf);
+        
+        // Add to the Distributed Cache.
+        FileSystem fs = FileSystem.get(classifyConf);
+        Path pathPattern = new Path(distCache, "part-r-[0-9]*");
+        FileStatus [] list = fs.globStatus(pathPattern);
+        for (FileStatus status : list) {
+            DistributedCache.addCacheFile(status.getPath().toUri(), classifyConf);
+        }
         Job classify = new Job(classifyConf, "shannon-nb-classify");
         classify.setJarByClass(NBController.class);
         classify.setNumReduceTasks(numReducers);
@@ -209,17 +216,21 @@ public class NBController extends Configured implements Tool {
         // Last job: manually read through the output file and 
         // sort the list of classification probabilities.
         
-        File localfile = new File(new Path(output, "part-r-00000").toString());
-        BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(localfile)));
-        String line;
         int correct = 0;
         int total = 0;
-        while ((line = in.readLine()) != null) {
-            String [] pieces = line.split("\t");
-            correct += (Integer.parseInt(pieces[1]) == 1 ? 1 : 0);
-            total++;
+        pathPattern = new Path(output, "part-r-[0-9]*");
+        FileStatus [] results = fs.globStatus(pathPattern);
+        for (FileStatus result : results) {
+            FSDataInputStream input = fs.open(result.getPath());
+            BufferedReader in = new BufferedReader(new InputStreamReader(input));
+            String line;
+            while ((line = in.readLine()) != null) {
+                String [] pieces = line.split("\t");
+                correct += (Integer.parseInt(pieces[1]) == 1 ? 1 : 0);
+                total++;
+            }
+            IOUtils.closeStream(in);
         }
-        IOUtils.closeStream(in);
         
         System.out.println(String.format("%s/%s, accuracy %.2f", correct, total, ((double)correct / (double)total) * 100.0));
         return 0;

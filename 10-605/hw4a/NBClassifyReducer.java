@@ -1,6 +1,4 @@
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
@@ -8,6 +6,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 import org.apache.hadoop.filecache.DistributedCache;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
@@ -37,16 +38,21 @@ public class NBClassifyReducer extends
         if (files == null || files.length < 1) {
             throw new IOException("DistributedCache returned an empty file set!");
         }
-        File localfile = new File(files[0].toString());
-        BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(localfile)));
-        String line;
-        while ((line = in.readLine()) != null) {
-            String [] elems = line.split("\\s+");
-            String label = elems[0];
-            String [] counts = elems[1].split(":");
-            docsWithLabel.put(label, new Integer(Integer.parseInt(counts[0])));
+        
+        // Read in from the DistributedCache.
+        FileSystem fs = FileSystem.get(context.getConfiguration());
+        for (URI file : files) {
+            FSDataInputStream input = fs.open(new Path(file.toString()));
+            BufferedReader in = new BufferedReader(new InputStreamReader(input));
+            String line;
+            while ((line = in.readLine()) != null) {
+                String [] elems = line.split("\\s+");
+                String label = elems[0];
+                String [] counts = elems[1].split(":");
+                docsWithLabel.put(label, new Integer(Integer.parseInt(counts[0])));
+            }
+            IOUtils.closeStream(in);
         }
-        IOUtils.closeStream(in);
     }
     
     @Override
