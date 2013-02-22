@@ -184,7 +184,7 @@ public class NBController extends Configured implements Tool {
         NBController.delete(classifyConf, output);
         
         // Add to the Distributed Cache.
-        FileSystem fs = FileSystem.get(classifyConf);
+        FileSystem fs = distCache.getFileSystem(classifyConf);
         Path pathPattern = new Path(distCache, "part-r-[0-9]*");
         FileStatus [] list = fs.globStatus(pathPattern);
         for (FileStatus status : list) {

@@ -1,13 +1,13 @@
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 
 import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.IntWritable;
@@ -34,15 +34,15 @@ public class NBClassifyReducer extends
         docsWithLabel = new HashMap<String, Integer>();
         
         // Build a HashMap of the label data in the DistributedCache.
-        URI [] files = DistributedCache.getCacheFiles(context.getConfiguration());
+        Path [] files = DistributedCache.getLocalCacheFiles(context.getConfiguration());
         if (files == null || files.length < 1) {
             throw new IOException("DistributedCache returned an empty file set!");
         }
         
         // Read in from the DistributedCache.
-        FileSystem fs = FileSystem.get(context.getConfiguration());
-        for (URI file : files) {
-            FSDataInputStream input = fs.open(new Path(file.toString()));
+        LocalFileSystem lfs = FileSystem.getLocal(context.getConfiguration());
+        for (Path file : files) {
+            FSDataInputStream input = lfs.open(file);
             BufferedReader in = new BufferedReader(new InputStreamReader(input));
             String line;
             while ((line = in.readLine()) != null) {
