@@ -24,10 +24,19 @@ public class KMeansCombiner extends Reducer<IntWritable, VectorWritable, IntWrit
         // Loop through the vectors, adding them together into a partial centroid.
         for (VectorWritable v : instances) {
             Vector<Double> instance = v.get();
-            partial = KMeansCombiner.add(partial, instance);
-            num += 1;
+            if (instance.size() > 0) {
+                partial = KMeansCombiner.add(partial, instance);
+                num += 1;
+            }
         }
-        context.write(clusterId, new VectorWritable(partial, clusterId.get(), num));
+        
+        // Did we get any actual vectors? Or just dummies?
+        if (num > 0) {
+            context.write(clusterId, new VectorWritable(partial, clusterId.get(), num));
+        } else {
+            // Write out the dummy.
+            context.write(clusterId, new VectorWritable(new Vector<Double>(), -1, -1));
+        }
     }
     
     public static Vector<Double> add(Vector<Double> partial, Vector<Double> v) {

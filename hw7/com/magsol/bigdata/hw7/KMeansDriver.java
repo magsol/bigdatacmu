@@ -161,6 +161,7 @@ public class KMeansDriver extends Configured implements Tool {
         long changes = 0; 
         do {
             Configuration iterConf = new Configuration();
+            iterConf.setInt(KMeansDriver.CLUSTERS, nClusters);
             iterConf.setFloat(KMeansDriver.TOLERANCE, tolerance);
             
             Path nextIter = new Path(centroidsPath.getParent(), 

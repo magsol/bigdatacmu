@@ -20,12 +20,14 @@ import org.apache.hadoop.mapreduce.Mapper;
 public class KMeansMapper extends Mapper<IntWritable, VectorWritable, IntWritable, VectorWritable> {
 
     private ArrayList<VectorWritable> centroids;
+    private int nClusters;
     
     @Override
     protected void setup(Context context) throws IOException {
         Configuration conf = context.getConfiguration();
         Path centroidsPath = new Path(conf.get(KMeansDriver.CENTROIDS));
         centroids = new ArrayList<VectorWritable>(KMeansDriver.readCentroids(conf, centroidsPath).values());
+        nClusters = conf.getInt(KMeansDriver.CLUSTERS, centroids.size());
     }
     
     @Override
@@ -53,5 +55,13 @@ public class KMeansMapper extends Mapper<IntWritable, VectorWritable, IntWritabl
 
         // Output the (possibly new) cluster membership, and the instance.
         context.write(new IntWritable(clusterId), instance);
+        
+        // Output a bunch of dummy vectors.
+        VectorWritable dummy = new VectorWritable(new Vector<Double>(), -1, -1);
+        for (int i = 1; i <= nClusters; ++i) {
+            if (i != clusterId) {
+                context.write(new IntWritable(i), dummy);
+            }
+        }
     }
 }

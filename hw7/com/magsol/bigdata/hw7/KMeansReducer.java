@@ -34,27 +34,36 @@ public class KMeansReducer extends Reducer<IntWritable, VectorWritable, IntWrita
         Vector<Double> centroid = new Vector<Double>();
         int num = 0;
         for (VectorWritable v : values) {
-            centroid = KMeansCombiner.add(centroid, v.get());
-            num += v.getNumInstances();
+            Vector<Double> instance = v.get();
+            if (instance.size() > 0) {
+                centroid = KMeansCombiner.add(centroid, instance);
+                num += v.getNumInstances();
+            }
         }
         
-        // Average the values. Also record the residual sum of squares
-        // difference between the current value and the previous one.
-        double residual = 0.0;
-        Vector<Double> previous = centroids.get(new Integer(clusterId.get())).get();
-        for (int i = 0; i < centroid.size(); ++i) {
-            double value = centroid.get(i).doubleValue() / (double)num;
-            residual += (value - previous.get(i).doubleValue());
-            centroid.set(i, new Double(value));
+        // Is this an empty centroid?
+        if (num == 0) {
+            // Write out the previous centroid for this cluster.
+            context.write(clusterId, centroids.get(new Integer(clusterId.get())));
+        } else {
+            // Average the values. Also record the residual sum of squares
+            // difference between the current value and the previous one.
+            double residual = 0.0;
+            Vector<Double> previous = centroids.get(new Integer(clusterId.get())).get();
+            for (int i = 0; i < centroid.size(); ++i) {
+                double value = centroid.get(i).doubleValue() / (double)num;
+                residual += (value - previous.get(i).doubleValue());
+                centroid.set(i, new Double(value));
+            }
+            
+            // Did this centroid change between iterations?
+            float tolerance = context.getConfiguration().getFloat(KMeansDriver.TOLERANCE, 0.000001F);
+            if (residual > tolerance) {
+                context.getCounter(KMeansDriver.Counter.CONVERGED).increment(1);
+            }
+            
+            // Write out the new centroid.
+            context.write(clusterId, new VectorWritable(centroid, clusterId.get(), num));            
         }
-        
-        // Did this centroid change between iterations?
-        float tolerance = context.getConfiguration().getFloat(KMeansDriver.TOLERANCE, 0.000001F);
-        if (residual > tolerance) {
-            context.getCounter(KMeansDriver.Counter.CONVERGED).increment(1);
-        }
-        
-        // Write out the new centroid.
-        context.write(clusterId, new VectorWritable(centroid, clusterId.get(), num));
     }
 }
