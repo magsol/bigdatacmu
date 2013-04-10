@@ -9,4 +9,4 @@ Descriptions
   - **hw4a**: Naive Bayes on Hadoop.
   - **hw4b**: Phrase finding on Hadoop.
   - **hw5**: SGD (incomplete).
-  
+  - **hw7**: K-Means clustering on Hadoop.
